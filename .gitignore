@@ -1,0 +1,19 @@
+# بيئة Python ومخرجات البناء
+.venv/
+__pycache__/
+*.pyc
+build/
+dist/
+release/
+*.spec
+
+# إعدادات وإحصائيات شخصية لكل جهاز
+SkySimple/config*.json
+SkySimple/stats*.json
+SkySimple/license_server.json
+SkySimple/selftest.txt
+SkySimple/templates/army/
+SkySimple/templates/army_*/
+
+# لوحة المفاتيح: أيقونة منسوخة وقت البناء
+SkyAdmin/icon.ico
