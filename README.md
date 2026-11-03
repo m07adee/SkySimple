@@ -8,7 +8,7 @@
 
 *A smart Clash of Clans automation bot for LDPlayer — Arabic & English UI, with a built-in license key system*
 
-![Version](https://img.shields.io/badge/version-2.3-1d9bf0)
+![Version](https://img.shields.io/badge/version-2.4-1d9bf0)
 ![Python](https://img.shields.io/badge/python-3.12-3776AB?logo=python&logoColor=white)
 ![Platform](https://img.shields.io/badge/platform-Windows-0078D6?logo=windows&logoColor=white)
 ![OpenCV](https://img.shields.io/badge/vision-OpenCV-5C3EE8?logo=opencv&logoColor=white)
@@ -25,12 +25,13 @@
 ### ⚔️ القرية الرئيسية
 | | |
 |---|---|
-| **3 استراتيجيات جاهزة** | التنانين الكهربائية (جهة مركّزة)، التنانين (جهتان)، العفاريت المتسللة (ثلاث جهات سريعة)، أو إنزال يدوي |
+| **بلا أي إعداد** | يقرأ شريط الجيش بنفسه في كل معركة (جنود، آلة حصار، أبطال، تعويذات) وينزل كل شيء: درّب جيشك واضغط «ابدأ» |
+| **4 استراتيجيات** | ذكي (يناسب أي جيش)، التنانين الكهربائية (جهة مركّزة)، التنانين (جهتان)، العفاريت المتسللة (ثلاث جهات سريعة) |
 | **4 طرق هجوم** | جهة واحدة، جهتان، ثلاث جهات، أو من كل الجهات، مع اختيار جهة البداية تلقائياً حسب كثافة المباني |
-| **مسح شريط الجيش** | يحفظ صورة كل خانة ويتعرف عليها في كل معركة حتى لو تغيّر ترتيبها أو كان البطل يتطور |
 | **إنزال ذكي** | تعويذات موجّهة نحو المركز، أبطال وقدرات بتوقيت، وإعادة إنزال أي جندي متبقٍ |
 | **قراءة الغنائم** | قارئ أرقام مدمج (بدون Tesseract) لتخطي القرى الفقيرة حسب الحد الذي تختاره |
-| **معايرة منطقة الإنزال** | أربع نقرات على زوايا الخريطة، مع تصغير الكاميرا تلقائياً لرؤية الخريطة كاملة |
+| **تصغير تلقائي** | يصغّر الكاميرا لرؤية الخريطة كاملة، فتبقى منطقة الإنزال ثابتة ولا تحتاج معايرة |
+| **أي دقة 16:9** | 1600×900 أو 1280×720 أو 1920×1080: يحوّل الإحداثيات تلقائياً |
 
 ### 🌙 القرية الليلية
 - هجمات بمرحلتين مع تمييز تلقائي لبداية كل مرحلة.
@@ -132,11 +133,11 @@ cd ..\SkyAdmin
 SkySimple/                  البوت
 ├── app.py                  الواجهة (customtkinter): الصفحات، الإعدادات، نافذة التفعيل
 ├── bot/
-│   ├── adb.py              الاتصال بالمحاكي: لقطات خام سريعة، نقر، سحب
+│   ├── adb.py              الاتصال بالمحاكي: لقطات خام سريعة، نقر، سحب، وتحويل أي دقة إلى 1600×900
 │   ├── touch.py            تكبير وتصغير بإصبعين عبر sendevent
 │   ├── vision.py           مطابقة القوالب متعددة المقاييس (OpenCV)
 │   ├── ocr.py              قارئ أرقام الغنائم
-│   ├── army.py             تقسيم شريط الجيش والتعرف على الخانات
+│   ├── army.py             قراءة شريط الجيش في كل معركة ومعرفة نوع كل خانة
 │   ├── strategy.py         الاستراتيجيات وطرق الهجوم واختيار الجهة
 │   ├── deploy.py           تنفيذ الإنزال
 │   ├── farm.py             حلقة القرية الرئيسية والتعافي من الأخطاء
@@ -170,7 +171,7 @@ SkyAdmin/                   لوحة البائع
 **SkySimple** is a Clash of Clans automation bot for the LDPlayer Android emulator, written in Python with OpenCV and a customtkinter desktop UI in Arabic (RTL) and English.
 
 **Highlights**
-- **Home Village** — 3 ready-made strategies (Electro Dragons, Dragons, Sneaky Goblins) × 4 attack methods, army-bar scanning with slot recognition, targeted spells, timed heroes and abilities, loot filtering with a built-in digit reader, automatic zoom-out, and deploy-area calibration.
+- **Home Village** — zero setup: the bot reads the army bar itself in every battle (troops, siege, heroes, spells). 4 strategies (Smart for any army, Electro Dragons, Dragons, Sneaky Goblins) × 4 attack methods, targeted spells, timed heroes and abilities, loot filtering with a built-in digit reader, automatic zoom-out with a fixed deploy area (no calibration), and support for any 16:9 resolution.
 - **Builder Base** — two-stage attacks, Elixir Cart and collector collection, automatic boat travel.
 - **Automation** — clan reinforcement requests, self-recovery (reloads, popups, stuck screens, ADB reconnects), scheduled breaks, multi-emulator profiles.
 - **Tracking** — per-attack statistics and Discord / Telegram notifications.

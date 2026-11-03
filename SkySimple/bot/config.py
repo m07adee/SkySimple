@@ -24,14 +24,11 @@ DEFAULTS = {
     },
     "collect": {"resources": True, "elixir_cart": True, "every": 1},
     "clan": {"request": False, "request_every_min": 30},
-    # الاستراتيجية: custom = الخانات اليدوية القديمة؛ أو edrag / dragons / goblins بعد مسح الجيش
+    # الجيش يُقرأ من الشريط في كل معركة، ومنطقة الإنزال ثابتة بعد التصغير: لا معايرة
     "attack": {
-        "strategy": "custom",
+        "strategy": "smart",    # smart (أي جيش) / edrag / dragons / goblins
         "method": "auto",       # auto (حسب الاستراتيجية) / one_side / two_sides / three_sides / all_sides
         "side": "auto",         # auto (حسب كثافة المباني) / rotate / top_left / top_right / bottom_right / bottom_left
-        # زوايا منطقة الإنزال على حافة الخريطة بعد التصغير الكامل (دقة 1600×900)
-        "area": {"left": [150, 448], "top": [800, 32], "right": [1460, 448], "bottom": [800, 860]},
-        "slots": [],
     },
     "notify": {"enabled": False, "discord_webhook": "", "telegram_token": "", "telegram_chat": "",
                "every": 5, "on_attack": True, "on_error": True, "on_stop": True},
@@ -52,12 +49,6 @@ DEFAULTS = {
     },
     "lang": "ar",
     "appearance": "dark",
-    "army": [
-        {"label": "Troop 1", "quantity": 10, "x": 75, "y": 815, "type": "troop", "enabled": True},
-        {"label": "King", "quantity": 1, "x": 948, "y": 815, "type": "hero", "enabled": True},
-    ],
-    # خط الإنزال: من نقطة إلى نقطة على حافة الخريطة
-    "deploy_line": [[180, 420], [760, 70]],
     "farm": {
         "click_delay": 0.15,
         "click_jitter": 4,
@@ -99,13 +90,13 @@ def load(path):
                 _merge(cfg, json.load(f))
         except (ValueError, OSError):
             pass  # ملف تالف: نبدأ بالقيم الافتراضية بدل الانهيار
-    # ترحيل الصيغة القديمة للخانات (is_spell / is_hero) إلى حقل type
-    for slot in cfg["army"]:
-        if "type" not in slot:
-            slot["type"] = "spell" if slot.pop("is_spell", False) else (
-                "hero" if slot.pop("is_hero", False) else "troop")
-        slot.pop("is_spell", None)
-        slot.pop("is_hero", None)
+    # الإصدارات القديمة: خانات يدوية ومعايرة ومسح جيش لم تعد مستخدمة
+    for key in ("army", "deploy_line"):
+        cfg.pop(key, None)
+    for key in ("area", "slots", "army_dir"):
+        cfg["attack"].pop(key, None)
+    if cfg["attack"].get("strategy") not in ("smart", "edrag", "dragons", "goblins"):
+        cfg["attack"]["strategy"] = "smart"
     return cfg
 
 

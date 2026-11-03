@@ -15,6 +15,8 @@ LDPLAYER_DIRS = [
 ]
 
 NO_WINDOW = 0x08000000 if os.name == "nt" else 0
+# كل الإحداثيات والقوالب مقيسة على هذه الدقة؛ أي دقة أخرى تُحوَّل إليها تلقائياً
+REF_W, REF_H = 1600, 900
 
 
 def find_adb(configured="auto"):
@@ -52,6 +54,8 @@ class ADB:
     def __init__(self, adb_path, serial):
         self.adb = adb_path
         self.serial = serial
+        self.device_size = None   # دقة المحاكي الحقيقية (عرض، ارتفاع)
+        self.sx = self.sy = 1.0   # معامل التحويل من 1600×900 إلى دقة المحاكي
 
     def _exec(self, cmd, timeout):
         """ينفذ الأمر ويرجع المخرجات، أو None عند انتهاء المهلة أو تعذر التشغيل."""
@@ -74,25 +78,51 @@ class ADB:
         return "connected" in text, text
 
     def screenshot(self):
-        """يرجع صورة BGR (numpy) أو None. الصيغة الخام أسرع بمرتين ونصف من PNG."""
+        """يرجع صورة BGR بدقة 1600×900 دائماً (أو None). الصيغة الخام أسرع بمرتين ونصف من PNG."""
+        img = None
         data = self._run("exec-out", "screencap", binary=True, timeout=20)
         if len(data) > 16:
             w, h = np.frombuffer(data[:8], np.uint32)
             size = int(w) * int(h) * 4
             if 0 < size <= len(data) - 12:
                 pixels = np.frombuffer(data[len(data) - size:], np.uint8).reshape(int(h), int(w), 4)
-                return cv2.cvtColor(pixels, cv2.COLOR_RGBA2BGR)
-        data = self._run("exec-out", "screencap", "-p", binary=True, timeout=20)
-        if not data:
-            return None
-        return cv2.imdecode(np.frombuffer(data, np.uint8), cv2.IMREAD_COLOR)
+                img = cv2.cvtColor(pixels, cv2.COLOR_RGBA2BGR)
+        if img is None:
+            data = self._run("exec-out", "screencap", "-p", binary=True, timeout=20)
+            if not data:
+                return None
+            img = cv2.imdecode(np.frombuffer(data, np.uint8), cv2.IMREAD_COLOR)
+            if img is None:
+                return None
+        return self._normalize(img)
+
+    def _normalize(self, img):
+        """يحوّل أي دقة إلى 1600×900 ويحفظ المعامل، فتعمل القوالب والإحداثيات على كل الدقات."""
+        h, w = img.shape[:2]
+        if h > w:  # المحاكي في وضع عمودي مؤقتاً (أثناء الإقلاع): نتركه كما هو
+            return img
+        self.device_size = (w, h)
+        self.sx, self.sy = w / REF_W, h / REF_H
+        if (w, h) == (REF_W, REF_H):
+            return img
+        interp = cv2.INTER_AREA if w > REF_W else cv2.INTER_LINEAR
+        return cv2.resize(img, (REF_W, REF_H), interpolation=interp)
+
+    def to_device(self, x, y):
+        return int(round(x * self.sx)), int(round(y * self.sy))
+
+    @property
+    def scaled(self):
+        return self.device_size is not None and self.device_size != (REF_W, REF_H)
 
     def tap(self, x, y):
-        self._run("shell", "input", "tap", str(int(x)), str(int(y)))
+        x, y = self.to_device(x, y)
+        self._run("shell", "input", "tap", str(x), str(y))
 
     def swipe(self, x1, y1, x2, y2, ms=300):
-        self._run("shell", "input", "swipe", str(int(x1)), str(int(y1)),
-                  str(int(x2)), str(int(y2)), str(ms))
+        x1, y1 = self.to_device(x1, y1)
+        x2, y2 = self.to_device(x2, y2)
+        self._run("shell", "input", "swipe", str(x1), str(y1), str(x2), str(y2), str(ms))
 
     def back(self):
         self._run("shell", "input", "keyevent", "4")

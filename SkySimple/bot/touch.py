@@ -28,8 +28,13 @@ def _ev(dev, t, c, v):
 
 
 def pinch(adb, dev, center=(800, 450), start=420, end=40, steps=10):
-    """إصبعان يقتربان من بعضهما (تصغير). start/end: نصف المسافة الأفقية بين الإصبعين."""
-    cx, cy = center
+    """إصبعان يقتربان من بعضهما (تصغير). start/end: نصف المسافة الأفقية بين الإصبعين.
+
+    القيم مقيسة على 1600×900 وتُحوَّل لدقة المحاكي (إحداثيات اللمس = بكسلات الشاشة في LDPlayer).
+    """
+    sx, sy = getattr(adb, "sx", 1.0), getattr(adb, "sy", 1.0)
+    cx, cy = int(center[0] * sx), int(center[1] * sy)
+    start, end = int(start * sx), max(8, int(end * sx))
     cmds = [
         _ev(dev, EV_ABS, SLOT, 0), _ev(dev, EV_ABS, TRACK, 101), _ev(dev, EV_ABS, PRESSURE, 1),
         _ev(dev, EV_ABS, POS_X, cx - start), _ev(dev, EV_ABS, POS_Y, cy - start // 3),

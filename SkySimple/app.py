@@ -16,14 +16,14 @@ from bot import config as cfgmod
 from bot import i18n
 from bot import license as lic
 from bot.adb import ADB, find_adb, ldplayer_instances
-from bot.army import ArmyBook
+from bot.army import read_bar
 from bot.notify import Notifier
 from bot.builder import BuilderFarmer
-from bot.farm import Farmer, slot_type
+from bot.farm import Farmer
 from bot.i18n import BUTTON_GROUPS, btn_name, t
 from bot.vision import Templates
 
-VERSION = "2.3"
+VERSION = "2.4"
 LICENSE_RECHECK_MS = 30 * 60 * 1000
 LICENSE_MAX_NET_FAILS = 4  # ساعتان بلا إنترنت ثم يتوقف
 if getattr(sys, "frozen", False):
@@ -76,11 +76,9 @@ def pt(p):
 class ScreenPicker(tk.Toplevel):
     """نافذة تعرض لقطة الشاشة. mode: region (سحب مربع)، point (نقرة)، line (سحب خط)."""
 
-    def __init__(self, master, screen, on_done, mode="region", steps=None):
+    def __init__(self, master, screen, on_done, mode="region"):
         super().__init__(master)
-        self.steps = steps or []      # mode="points": أسماء النقاط المطلوبة بالترتيب
-        self.points = []
-        self.title(t("area_step", name=self.steps[0], i=1) if self.steps else t("picker_title"))
+        self.title(t("picker_title"))
         self.configure(bg="#000000")
         self.screen, self.on_done, self.mode = screen, on_done, mode
         h, w = screen.shape[:2]
@@ -119,16 +117,6 @@ class ScreenPicker(tk.Toplevel):
         s = self.scale
         (x1, y1), (x2, y2) = self.start, (e.x, e.y)
         p1, p2 = (int(x1 / s), int(y1 / s)), (int(x2 / s), int(y2 / s))
-        if self.mode == "points":
-            self.points.append(p2)
-            self.canvas.create_oval(e.x - 7, e.y - 7, e.x + 7, e.y + 7, fill="#00ff88", outline="#000")
-            if len(self.points) < len(self.steps):
-                i = len(self.points)
-                self.title(t("area_step", name=self.steps[i], i=i + 1))
-                return
-            self.destroy()
-            self.on_done(self.points)
-            return
         self.destroy()
         if self.mode == "line":
             self.on_done(p1, p2)
@@ -168,12 +156,18 @@ class ActivationDialog(ctk.CTkToplevel):
             lbl.configure(anchor="center", justify="center")
             lbl.pack(fill="x", padx=24, pady=pady)
         app.label(box, t("lic_key"), 12, "bold").pack(fill="x", padx=24)
-        self.entry = ctk.CTkEntry(box, font=("Consolas", 15), justify="center", height=42,
+        key_row = ctk.CTkFrame(box, fg_color="transparent")
+        key_row.pack(fill="x", padx=24, pady=(4, 6))
+        app.button(key_row, t("lic_paste"), self.paste, kind="ghost", width=80, height=42).pack(side=app.E)
+        self.entry = ctk.CTkEntry(key_row, font=("Consolas", 15), justify="center", height=42,
                                   fg_color=FIELD, border_color=BORDER, corner_radius=10,
                                   placeholder_text="SKY-XXXXX-XXXXX-XXXXX-XXXXX")
-        self.entry.pack(fill="x", padx=24, pady=(4, 6))
+        self.entry.pack(side=app.E, fill="x", expand=True, padx=(0, 8) if app.E == "right" else (8, 0))
         self.entry.insert(0, client.saved_key())
         self.entry.bind("<Return>", lambda e: self.activate())
+        # Ctrl+V لا يعمل في Tk عندما تكون لوحة المفاتيح عربية (الحرف ر بدل v): نعتمد رمز الزر نفسه
+        self.entry.bind("<Control-KeyPress>", self._ctrl_key)
+        self.entry.bind("<Shift-Insert>", lambda e: self.paste() or "break")
         self.status = app.label(box, message, 12, "bold", color=DANGER, wraplength=430)
         self.status.pack(fill="x", padx=24, pady=(0, 6))
 
@@ -210,6 +204,27 @@ class ActivationDialog(ctk.CTkToplevel):
             self.destroy()
         else:
             self.app._close()
+
+    def paste(self):
+        """يلصق المفتاح من الحافظة بعد تنظيفه (مسافات أو أسطر زائدة من رسائل الواتساب وغيرها)."""
+        try:
+            text = self.clipboard_get()
+        except tk.TclError:
+            return
+        key = "".join(text.split()).upper()
+        if key:
+            self.entry.delete(0, "end")
+            self.entry.insert(0, key)
+            self.status.configure(text="")
+            self.entry.focus_set()
+
+    def _ctrl_key(self, e):
+        if e.keycode == 86:  # V بأي لغة
+            self.paste()
+            return "break"
+        if e.keycode == 65:  # A: تحديد الكل
+            self.entry.select_range(0, "end")
+            return "break"
 
     def copy_id(self):
         self.clipboard_clear()
@@ -249,8 +264,6 @@ class App(ctk.CTk):
         self._lic_job = None
         self._lic_dialog = None
         self.cfg = cfgmod.load(CONFIG_PATH)
-        if PROFILE and self.cfg["attack"].get("army_dir", "army") == "army":
-            self.cfg["attack"]["army_dir"] = f"army_{PROFILE}"
         i18n.set_lang(self.cfg.get("lang", "ar"))
         ctk.set_appearance_mode(self.cfg.get("appearance", "dark"))
         self.templates = Templates(os.path.join(BASE, "templates"))
@@ -577,7 +590,7 @@ class App(ctk.CTk):
         strat = self.card(top, t("strategy"))
         strat.pack(side=self.S, fill="both", expand=True, padx=(0, 6) if not i18n.is_rtl() else (6, 0))
         self.option_row(strat, "strategy", "attack.strategy",
-                        [(k, "strat_" + k) for k in ("custom", "edrag", "dragons", "goblins")])
+                        [(k, "strat_" + k) for k in ("smart", "edrag", "dragons", "goblins")])
         self.option_row(strat, "method", "attack.method",
                         [(k, "method_" + k) for k in ("auto", "one_side", "two_sides", "three_sides", "all_sides")])
         self.option_row(strat, "side", "attack.side",
@@ -585,34 +598,13 @@ class App(ctk.CTk):
                                                      "bottom_right", "bottom_left")])
         self.switch_row(strat, "zoom_out", "farm.zoom_out")
         ctk.CTkFrame(strat, height=8, fg_color="transparent").pack()
-        area = self.card(top, t("area"))
-        area.pack(side=self.S, fill="both", expand=True)
-        self.label(area, t("area_hint"), 12, color=MUTED, wraplength=380).pack(fill="x", padx=18)
-        self.area_lbl = self.label(area, "", 12, "bold")
-        self.area_lbl.pack(fill="x", padx=18, pady=8)
-        self.button(area, t("area_btn"), self._pick_area, "primary", width=200).pack(anchor=self.A, padx=18, pady=(0, 14))
-        self._render_area()
-
-        scan = self.card(body, t("army_scan"))
-        scan.pack(fill="x", pady=(0, 12))
-        self.label(scan, t("scan_hint"), 12, color=MUTED, wraplength=820).pack(fill="x", padx=18)
-        self.button(scan, t("scan_btn"), self._scan_army, "primary", width=180).pack(anchor=self.A, padx=18, pady=8)
-        self.scan_frame = ctk.CTkFrame(scan, fg_color="transparent")
-        self.scan_frame.pack(fill="x", padx=12, pady=(0, 12))
-        self._render_scan()
-
-        army = self.card(body, t("army"))
-        army.pack(fill="x", pady=(0, 12))
-        self.label(army, t("army_hint"), 12, color=MUTED, wraplength=800).pack(fill="x", padx=18)
-        self.army_frame = ctk.CTkFrame(army, fg_color="transparent")
-        self.army_frame.pack(fill="x", padx=12, pady=8)
-        bar = ctk.CTkFrame(army, fg_color="transparent")
-        bar.pack(fill="x", padx=18, pady=(0, 14))
-        self.button(bar, t("add_slot"), self._add_slot, "ghost", width=140).pack(side=self.S)
-        self.line_lbl = self.label(bar, "", 12, color=MUTED)
-        self.button(bar, t("pick_line"), self._pick_deploy_line, "primary", width=150).pack(side=self.E)
-        self.line_lbl.pack(side=self.E, padx=10)
-        self._render_army()
+        auto = self.card(top, t("army_auto"))
+        auto.pack(side=self.S, fill="both", expand=True)
+        self.label(auto, t("army_auto_hint"), 12, color=MUTED, wraplength=380).pack(fill="x", padx=18)
+        self.label(auto, t("army_check_hint"), 11, color=MUTED, wraplength=380).pack(fill="x", padx=18, pady=(10, 0))
+        self.button(auto, t("army_check"), self._check_army, "primary", width=200).pack(anchor=self.A, padx=18, pady=8)
+        self.army_lbl = self.label(auto, "", 12, "bold", wraplength=380)
+        self.army_lbl.pack(fill="x", padx=18, pady=(0, 14))
 
         two = ctk.CTkFrame(body, fg_color="transparent")
         two.pack(fill="x")
@@ -631,67 +623,6 @@ class App(ctk.CTk):
         ctk.CTkFrame(loot, height=10, fg_color="transparent").pack()
         self.button(body, t("save"), self._save, "success", width=160).pack(anchor=self.A, pady=12)
 
-    def _render_army(self):
-        for w in self.army_frame.winfo_children():
-            w.destroy()
-        self.army_rows = []
-        hdr = ctk.CTkFrame(self.army_frame, fg_color="transparent")
-        hdr.pack(fill="x")
-        for key, w in (("col_on", 50), ("col_name", 200), ("col_qty", 70), ("col_type", 120),
-                       ("col_pos", 150), ("", 40)):
-            ctk.CTkLabel(hdr, text=rtl(t(key)) if key else "", font=font(12, "bold"),
-                         text_color=MUTED, width=w).pack(side=self.S, padx=3)
-        types = [("troop", t("type_troop")), ("hero", t("type_hero")), ("spell", t("type_spell"))]
-        for i, slot in enumerate(self.cfg["army"]):
-            row = ctk.CTkFrame(self.army_frame, fg_color=FIELD, corner_radius=10)
-            row.pack(fill="x", pady=3)
-            en = tk.BooleanVar(value=slot.get("enabled", True))
-            ctk.CTkCheckBox(row, text="", variable=en, width=50, fg_color=ACCENT,
-                            checkbox_width=22, checkbox_height=22).pack(side=self.S, padx=(14, 3), pady=6)
-            name = ctk.CTkEntry(row, width=200, font=font(13), justify="right" if i18n.is_rtl() else "left",
-                                border_color=BORDER)
-            name.insert(0, slot["label"])
-            name.pack(side=self.S, padx=3)
-            qty = ctk.CTkEntry(row, width=70, font=font(13), justify="center", border_color=BORDER)
-            qty.insert(0, str(slot["quantity"]))
-            qty.pack(side=self.S, padx=3)
-            kind = ctk.CTkOptionMenu(row, values=[x[1] for x in types], width=120, font=font(12),
-                                     fg_color=ACCENT, button_color=ACCENT_HOVER)
-            kind.set(dict(types)[slot_type(slot)])
-            kind.pack(side=self.S, padx=3)
-            self.button(row, f"{t('pick')}  {pt((slot['x'], slot['y']))}", lambda i=i: self._pick_slot(i),
-                        "ghost", width=150, height=30).pack(side=self.S, padx=3)
-            self.button(row, "✕", lambda i=i: self._del_slot(i), "danger", width=40, height=30
-                        ).pack(side=self.S, padx=3)
-            self.army_rows.append((en, name, qty, kind, {v: k for k, v in types}))
-        line = self.cfg["deploy_line"]
-        if hasattr(self, "line_lbl"):
-            arrow = "←" if i18n.is_rtl() else "→"
-            self.line_lbl.configure(text=rtl(f"{t('deploy_line')}: {pt(line[0])} {arrow} {pt(line[1])}"))
-
-    def _collect_army(self):
-        if not getattr(self, "army_rows", None):
-            return
-        for slot, (en, name, qty, kind, rev) in zip(self.cfg["army"], self.army_rows):
-            try:
-                slot["enabled"] = en.get()
-                slot["label"] = name.get().strip() or t("new_slot")
-                slot["quantity"] = max(1, int(qty.get()))
-                slot["type"] = rev.get(kind.get(), "troop")
-            except (ValueError, tk.TclError):
-                pass
-
-    def _add_slot(self):
-        self._collect_army()
-        self.cfg["army"].append({"label": t("new_slot"), "quantity": 1, "x": 800, "y": 815,
-                                 "type": "troop", "enabled": True})
-        self._render_army()
-
-    def _del_slot(self, i):
-        self._collect_army()
-        del self.cfg["army"][i]
-        self._render_army()
-
     def _with_screen(self, callback):
         if not self._need_adb():
             return
@@ -703,110 +634,18 @@ class App(ctk.CTk):
                           messagebox.showerror(t("error"), t("shot_failed")))
         threading.Thread(target=work, daemon=True).start()
 
-    def _pick_slot(self, i):
-        self._collect_army()
-
-        def done(p):
-            self.cfg["army"][i].update(x=p[0], y=p[1])
-            self._render_army()
-        self._with_screen(lambda img: ScreenPicker(self, img, done, "point"))
-
-    def _pick_deploy_line(self):
-        self._collect_army()
-        messagebox.showinfo(t("deploy_line"), t("pick_line_hint"))
-
-        def done(p1, p2):
-            self.cfg["deploy_line"] = [list(p1), list(p2)]
-            self._render_army()
-            self.log(t("log_line", line=self.cfg["deploy_line"]))
-        self._with_screen(lambda img: ScreenPicker(self, img, done, "line"))
-
-    # ---------- منطقة الإنزال ----------
-    def _render_area(self):
-        a = self.cfg["attack"]["area"]
-        names = ("left", "top", "right", "bottom")
-        self.area_lbl.configure(text=rtl("   ".join(f"{t('corner_' + n)} {pt(a[n])}" for n in names)))
-
-    def _pick_area(self):
-        messagebox.showinfo(t("area"), t("area_hint"))
-        names = ("left", "top", "right", "bottom")
-
-        def done(points):
-            self.cfg["attack"]["area"] = {n: list(p) for n, p in zip(names, points)}
-            self._render_area()
-            cfgmod.save(CONFIG_PATH, self.cfg)
-            self.log(t("log_area"))
-        self._with_screen(lambda img: ScreenPicker(self, img, done, "points",
-                                                   steps=[t("corner_" + n) for n in names]))
-
-    # ---------- مسح الجيش ----------
-    def _scan_army(self):
+    def _check_army(self):
+        """يقرأ شريط الجيش من الشاشة الحالية كما سيقرؤه البوت في المعركة."""
         def done(img):
-            book = ArmyBook(self.templates.folder, self.cfg["attack"].get("army_dir", "army"))
-            slots = book.scan(img)
+            slots = read_bar(img)
             if not slots:
-                messagebox.showwarning(t("warning"), t("scan_none"))
+                self.army_lbl.configure(text=rtl(t("log_no_army")), text_color=WARN)
                 return
-            self.cfg["attack"]["slots"] = slots
-            cfgmod.save(CONFIG_PATH, self.cfg)
-            self._render_scan()
-            self.log(t("scan_done", n=len(slots)))
+            n = {k: sum(s["type"] == k for s in slots) for k in ("troop", "siege", "hero", "spell")}
+            msg = t("army_read", troops=n["troop"], siege=n["siege"], heroes=n["hero"], spells=n["spell"])
+            self.army_lbl.configure(text=rtl(msg), text_color=OK)
+            self.log(msg)
         self._with_screen(done)
-
-    def _render_scan(self):
-        for w in self.scan_frame.winfo_children():
-            w.destroy()
-        self.scan_rows = []
-        self.scan_imgs = []
-        slots = self.cfg["attack"].get("slots", [])
-        if not slots:
-            return
-        book = ArmyBook(self.templates.folder, self.cfg["attack"].get("army_dir", "army"))
-        types = [("troop", t("type_troop")), ("siege", t("type_siege")), ("hero", t("type_hero")),
-                 ("spell", t("type_spell"))]
-        spells = [(k, t("spell_" + k)) for k in ("rage", "haste", "freeze", "heal", "other")]
-        grid = ctk.CTkFrame(self.scan_frame, fg_color="transparent")
-        grid.pack(fill="x")
-        per_row = 4
-        for i, s in enumerate(slots):
-            cell = ctk.CTkFrame(grid, fg_color=FIELD, corner_radius=10)
-            col = i % per_row if not i18n.is_rtl() else per_row - 1 - i % per_row
-            cell.grid(row=i // per_row, column=col, padx=4, pady=4, sticky="nsew")
-            grid.grid_columnconfigure(col, weight=1)
-            head = ctk.CTkFrame(cell, fg_color="transparent")
-            head.pack(fill="x", padx=8, pady=(8, 2))
-            img = book.get(s["id"])
-            if img is not None:
-                pil = Image.fromarray(cv2.cvtColor(img, cv2.COLOR_BGR2RGB))
-                ci = ctk.CTkImage(pil, size=(44, 44))
-                self.scan_imgs.append(ci)
-                ctk.CTkLabel(head, image=ci, text="").pack(side=self.S)
-            en = tk.BooleanVar(value=s.get("enabled", True))
-            ctk.CTkCheckBox(head, text="", variable=en, width=24, fg_color=ACCENT).pack(side=self.E)
-            name = ctk.CTkEntry(head, width=110, font=font(12), placeholder_text=s["id"],
-                                justify="right" if i18n.is_rtl() else "left", border_color=BORDER)
-            if s.get("label"):
-                name.insert(0, s["label"])
-            name.pack(side=self.S, padx=6)
-            kind = ctk.CTkOptionMenu(cell, values=[x[1] for x in types], width=150, font=font(12),
-                                     fg_color=ACCENT, button_color=ACCENT_HOVER)
-            kind.set(dict(types).get(s.get("type", "troop")))
-            kind.pack(padx=8, pady=2)
-            sp = ctk.CTkOptionMenu(cell, values=[x[1] for x in spells], width=150, font=font(12),
-                                   fg_color=("#7c4dbe", "#6a3fae"), button_color=("#6a3fae", "#57338f"))
-            sp.set(dict(spells).get(s.get("spell", "rage")))
-            sp.pack(padx=8, pady=(2, 8))
-            self.scan_rows.append((s, en, name, kind, sp, {v: k for k, v in types}, {v: k for k, v in spells}))
-
-    def _collect_scan(self):
-        for s, en, name, kind, sp, rt, rs in getattr(self, "scan_rows", []):
-            try:
-                s["enabled"] = en.get()
-                s["label"] = name.get().strip()
-                s["type"] = rt.get(kind.get(), "troop")
-                s["spell"] = rs.get(sp.get(), "rage")
-            except tk.TclError:
-                pass
 
     # ================= الإحصائيات =================
     def _page_stats(self, p):
@@ -1165,11 +1004,13 @@ class App(ctk.CTk):
             ok, text = self.adb.connect()
             img = self.adb.screenshot() if ok else None
             if ok and img is not None:
-                h, w = img.shape[:2]
+                w, h = self.adb.device_size or img.shape[1::-1]
                 self.connected, self.resolution = True, (w, h)
                 self.log(t("log_connected", serial=ltr(self.adb.serial), res=ltr(f"{w}×{h}")))
-                if (w, h) != (1600, 900):
-                    self.log(t("log_res_warn"))
+                if self.adb.scaled:
+                    self.log(t("log_scaled", res=ltr(f"{w}×{h}")))
+                    if abs(w / h - 16 / 9) > 0.02:  # نسبة غير 16:9 تشوّه الصورة
+                        self.log(t("log_res_warn"))
             else:
                 self.connected = False
                 self.log(t("log_conn_fail", msg=text or "—"))
@@ -1238,8 +1079,6 @@ class App(ctk.CTk):
                 pass
         if hasattr(self, "mode_seg"):
             self.cfg["mode"] = self.mode_seg.get_id()
-        self._collect_army()
-        self._collect_scan()
 
     def _save(self):
         self._collect()

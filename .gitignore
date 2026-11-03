@@ -17,3 +17,6 @@ SkySimple/templates/army_*/
 
 # لوحة المفاتيح: أيقونة منسوخة وقت البناء
 SkyAdmin/icon.ico
+
+# سجل البناء
+SkySimple/build.log

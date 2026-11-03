@@ -1,4 +1,4 @@
-"""شريط الجيش في المعركة: مسحه وحفظ صور الخانات، والتعرف عليها في كل معركة، ومعرفة الخانة الفارغة."""
+"""شريط الجيش في المعركة: قراءته مباشرة في كل معركة، ومعرفة نوع كل خانة والخانة الفارغة."""
 import os
 
 import cv2
@@ -51,6 +51,37 @@ def guess_type(screen, a, b, bar=BAR):
     if hue > 115:
         return "spell"
     return "troop" if has_count else "hero"
+
+
+def is_placeholder(screen, a, b, bar=BAR):
+    """خانة فارغة في آخر الشريط (إطار متقطع على خلفية حجرية): تكاد تخلو من الألوان.
+
+    البطاقات الحقيقية ملونة بنسبة 33٪ فأكثر، والخانة الفارغة نحو 3٪.
+    """
+    hsv = cv2.cvtColor(screen[bar[0] + 50:bar[0] + 110, a + 15:max(a + 16, b - 15)], cv2.COLOR_BGR2HSV)
+    return ((hsv[:, :, 1] > 90) & (hsv[:, :, 2] > 90)).mean() < 0.12
+
+
+def read_bar(screen, bar=BAR):
+    """يقرأ شريط الجيش الحالي: [{"x", "type"}] بالترتيب، بدون الخانات الفارغة (رمادية).
+
+    الأنواع: troop (عليها عدد)، spell (بنفسجية)، siege (أول بطاقة بلا عدد بعد الجنود بفراغ أوسع)،
+    hero (بقية البطاقات بلا عدد: الأبطال وقوات القلعة).
+    """
+    slots, last_troop_end = [], None
+    for a, b in segment(screen, bar):
+        if is_placeholder(screen, a, b, bar):
+            continue
+        x = (a + b) // 2
+        kind = guess_type(screen, a, b, bar)
+        if kind == "hero" and last_troop_end is not None and a - last_troop_end > 25 \
+                and not any(s["type"] == "siege" for s in slots):
+            kind = "siege"
+        if kind == "troop":
+            last_troop_end = b
+        if not is_empty(screen, x, bar):
+            slots.append({"x": x, "type": kind})
+    return slots
 
 
 class ArmyBook:

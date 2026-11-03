@@ -6,10 +6,9 @@ import time
 import os
 
 from . import touch, vision
-from .army import ArmyBook
 from .clan import ClanMixin
 from .deploy import StrategyDeployer
-from .i18n import btn_name, embed, t
+from .i18n import btn_name, t
 from .notify import Notifier
 from .ocr import DigitReader
 
@@ -31,16 +30,6 @@ class AttackAborted(Exception):
     """الهجوم لم يكتمل لسبب يمكن التعافي منه (شاشة غير متوقعة...)."""
 
 
-def slot_type(slot):
-    if "type" in slot:
-        return slot["type"]
-    if slot.get("is_spell"):
-        return "spell"
-    if slot.get("is_hero"):
-        return "hero"
-    return "troop"
-
-
 class Farmer(StrategyDeployer, ClanMixin):
     village = "home"
 
@@ -54,7 +43,6 @@ class Farmer(StrategyDeployer, ClanMixin):
         self.stats = {"attacks": 0, "skipped": 0, "errors": 0, "started": time.time(),
                       "gold": 0, "elixir": 0, "dark": 0, "history": []}
         self.digits = DigitReader(os.path.join(templates.folder, "digits.npz"))
-        self.army_book = ArmyBook(templates.folder, cfg.get("attack", {}).get("army_dir", "army"))
         self.notifier = Notifier(cfg, log)
         self._touch_dev = None
 
@@ -126,7 +114,8 @@ class Farmer(StrategyDeployer, ClanMixin):
             self.sleep(2)
             focus = self.adb.current_app()
         package = self.cfg.get("package", "com.supercell.clashofclans")
-        if focus and package not in focus:
+        # تعذّر معرفة التطبيق الظاهر (خدمة النوافذ لا تستجيب): نشغّل اللعبة احتياطاً، فتشغيلها وهي مفتوحة لا يضر
+        if package not in focus:
             self.log(t("log_game_restart"))
             self.adb.start_app(package)
             self.sleep(self.cfg["farm"].get("game_boot_seconds", 35))
@@ -394,39 +383,6 @@ class Farmer(StrategyDeployer, ClanMixin):
         self.log(t("log_max_skip"))
         return self.adb.screenshot()
 
-    def deploy_points(self, count):
-        (x1, y1), (x2, y2) = self.cfg["deploy_line"][0], self.cfg["deploy_line"][1]
-        if count <= 1:
-            return [((x1 + x2) // 2, (y1 + y2) // 2)]
-        return [(x1 + (x2 - x1) * i // (count - 1), y1 + (y2 - y1) * i // (count - 1))
-                for i in range(count)]
-
-    def deploy_army(self):
-        heroes = []
-        for slot in self.cfg["army"]:
-            if not slot.get("enabled", True):
-                continue
-            kind = slot_type(slot)
-            qty = 1 if kind == "hero" else int(slot.get("quantity", 1))
-            self.log(t("log_deploy", name=embed(slot["label"]), qty=qty))
-            self.tap(slot["x"], slot["y"])
-            if kind == "spell":
-                continue  # التعويذات تحتاج هدفاً محدداً؛ تُترك للاستخدام اليدوي
-            for x, y in self.deploy_points(qty):
-                self.tap(x, y)
-            if kind == "hero":
-                heroes.append(slot)
-        self.log(t("log_deployed"))
-        return heroes
-
-    def use_abilities(self, heroes):
-        if not heroes:
-            return
-        self.sleep(self.cfg["farm"].get("ability_after", 8))
-        self.log(t("log_abilities"))
-        for slot in heroes:
-            self.tap(slot["x"], slot["y"])
-
     def finish_battle(self, deployed_at):
         f = self.cfg["farm"]
         remaining = max(10, f.get("battle_seconds", 200) - (time.time() - deployed_at))
@@ -458,14 +414,16 @@ class Farmer(StrategyDeployer, ClanMixin):
         else:
             self.sleep(8)
         self.zoom_out()
-        screen = self.search_base()
+        self.search_base()
         self.last_gains = {}
-        deployed_at = time.time()
-        if not (self.strategy_ready() and self.deploy_strategy(screen)):
-            heroes = self.deploy_army()
-            deployed_at = time.time()
-            self.use_abilities(heroes)
-        self.finish_battle(deployed_at)
+        # لقطة جديدة بعد اختيار القرية: الشريط يظهر كاملاً ولا تغطيه رسائل البحث
+        if not self.deploy_strategy(self.adb.screenshot()):
+            # لا جيش في الشريط: ننهي المعركة قبل الإنزال (بلا خسارة) بدل البقاء عالقين في البحث
+            self.press("end_button", timeout=3)
+            self.press("end_confirm", timeout=3)
+            self.press("return_home", timeout=10, wait_after=3)
+            raise AttackAborted(t("log_no_army"))
+        self.finish_battle(time.time())
         self.finish_attack("log_attack_done")
 
     def finish_attack(self, key):

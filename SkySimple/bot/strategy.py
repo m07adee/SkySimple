@@ -2,6 +2,9 @@
 
 منطقة الإنزال معيّن بأربع زوايا (يسار، أعلى، يمين، أسفل) على حافة ساحة المعركة،
 وكل ضلع من أضلاعه الأربعة جهة هجوم محتملة.
+
+بعد التصغير الكامل تظهر ساحة المعركة دائماً في المكان نفسه من الشاشة (1600×900)،
+لذلك المنطقة ثابتة ولا تحتاج معايرة.
 """
 import cv2
 import numpy as np
@@ -14,17 +17,20 @@ EDGES = {
 }
 EDGE_ORDER = ["top_left", "top_right", "bottom_right", "bottom_left"]
 
-# إعدادات كل استراتيجية: عدد الجهات، مدى انتشار الجنود على الضلع، ومتى وأين تُرمى التعويذات
+# زوايا ساحة المعركة بعد التصغير الكامل، مقيسة على معارك حقيقية بدقة 1600×900
+DEFAULT_AREA = {"left": [150, 448], "top": [800, 32], "right": [1460, 448], "bottom": [800, 860]}
+
+# إعدادات كل استراتيجية: عدد الجهات، مدى انتشار الجنود على الضلع، متى تُرمى التعويذات،
+# وكم تتعمق أول تعويذة على مسار الهجوم (0 = الحافة، 1 = المركز)
 PROFILES = {
-    # التنانين الكهربائية: جهة واحدة مركّزة، ثم غضب على مسارها نحو المركز
-    "edrag": {"sides": 1, "spread": 0.7, "hero_delay": 4, "spell_delay": 10,
-              "spell_frac": {"rage": 0.35, "haste": 0.3, "freeze": 0.55, "heal": 0.3, "other": 0.45}},
+    # ذكي: يناسب أي جيش، جهتان متجاورتان بانتشار متوسط
+    "smart": {"sides": 2, "spread": 0.8, "hero_delay": 5, "spell_delay": 12, "spell_frac": 0.4},
+    # التنانين الكهربائية: جهة واحدة مركّزة، ثم تعويذات على مسارها نحو المركز
+    "edrag": {"sides": 1, "spread": 0.7, "hero_delay": 4, "spell_delay": 10, "spell_frac": 0.35},
     # التنانين العادية: انتشار عريض على جهتين متجاورتين، والتعويذات أعمق قليلاً
-    "dragons": {"sides": 2, "spread": 0.9, "hero_delay": 6, "spell_delay": 14,
-                "spell_frac": {"rage": 0.45, "haste": 0.35, "freeze": 0.6, "heal": 0.35, "other": 0.5}},
+    "dragons": {"sides": 2, "spread": 0.9, "hero_delay": 6, "spell_delay": 14, "spell_frac": 0.45},
     # العفاريت المتسللة: مجموعات سريعة من ثلاث جهات، وتسريع مبكر فوقها
-    "goblins": {"sides": 3, "spread": 0.45, "hero_delay": 2, "spell_delay": 3,
-                "spell_frac": {"haste": 0.25, "rage": 0.3, "freeze": 0.5, "heal": 0.25, "other": 0.35}},
+    "goblins": {"sides": 3, "spread": 0.45, "hero_delay": 2, "spell_delay": 3, "spell_frac": 0.25},
 }
 METHOD_SIDES = {"one_side": 1, "two_sides": 2, "three_sides": 3, "all_sides": 4}
 
@@ -90,6 +96,6 @@ def choose_edges(screen, area, side, sides, attack_no=0):
 
 def plan(profile_name, method, side, screen, area, attack_no=0):
     """يرجع (ملف الاستراتيجية، قائمة الجهات)."""
-    prof = PROFILES.get(profile_name, PROFILES["edrag"])
+    prof = PROFILES.get(profile_name, PROFILES["smart"])
     sides = METHOD_SIDES.get(method, prof["sides"])
     return prof, choose_edges(screen, area, side, sides, attack_no)
