@@ -59,6 +59,9 @@ DEFAULTS = {
         "ability_after": 8,
         "zoom_out": True,
         "game_boot_seconds": 35,
+        "freeze_seconds": 60,        # شاشة ثابتة تماماً لهذه المدة = اللعبة متجمّدة
+        "attack_max_seconds": 720,   # هجوم أطول من هذا = عالق
+        "emulator_boot_seconds": 70,
         "home_wait": 5,
         "max_attacks": 0,
     },

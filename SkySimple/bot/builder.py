@@ -39,6 +39,7 @@ class BuilderFarmer(Farmer):
     def one_attack(self):
         b = self.bcfg()
         self.log(t("log_bb_attack"))
+        self.watchdog.start_attack()
         self.last_gains = {}
         self.prepare()
         self.press("bb_attack", timeout=10, wait_after=2)
@@ -83,4 +84,5 @@ class BuilderFarmer(Farmer):
                 self.press("bb_return_home", timeout=15, wait_after=3)
                 break
 
+        self.watchdog.end_attack()
         self.finish_attack("log_bb_done")

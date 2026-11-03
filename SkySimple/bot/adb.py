@@ -139,3 +139,16 @@ class ADB:
 
     def is_app_running(self, package):
         return package in self.current_app()
+
+    def reboot_emulator(self):
+        """إعادة تشغيل نسخة LDPlayer كاملة (عندما لا تكفي إعادة تشغيل اللعبة). يرجع True إن أُرسل الأمر."""
+        port = self.serial.rpartition(":")[2]
+        if not port.isdigit():
+            return False
+        index = (int(port) - 5555) // 2
+        dirs = [os.path.dirname(self.adb)] + LDPLAYER_DIRS
+        for d in dirs:
+            exe = os.path.join(d, "ldconsole.exe")
+            if os.path.isfile(exe):
+                return self._exec([exe, "reboot", "--index", str(index)], 30) is not None
+        return False

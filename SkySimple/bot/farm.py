@@ -11,8 +11,13 @@ from .deploy import StrategyDeployer
 from .i18n import btn_name, t
 from .notify import Notifier
 from .ocr import DigitReader
+from .watchdog import GameFrozen, Watchdog, WatchedADB
 
 MAX_ERRORS_IN_ROW = 5
+ERRORS_BEFORE_RESTART = 3
+# إعادات تشغيل متتالية للعبة بلا هجوم ناجح: بعدها نعيد تشغيل المحاكي، ثم نتوقف
+RESTARTS_BEFORE_REBOOT = 2
+MAX_RESTARTS_IN_ROW = 4
 # عناصر الخريطة (القارب، الفقاعات، العربة) يتغير حجمها مع تقريب الكاميرا
 MAP_SCALES = (0.55, 0.65, 0.75, 0.85, 1.0, 1.15, 1.3)
 BOAT_SCALES = MAP_SCALES
@@ -34,7 +39,9 @@ class Farmer(StrategyDeployer, ClanMixin):
     village = "home"
 
     def __init__(self, adb, cfg, templates, log, on_stats=None):
-        self.adb = adb
+        f = cfg["farm"]
+        self.watchdog = Watchdog(f.get("freeze_seconds", 60), f.get("attack_max_seconds", 720))
+        self.adb = WatchedADB(adb, self.watchdog)
         self.cfg = cfg
         self.tpl = templates
         self.log = log
@@ -155,7 +162,9 @@ class Farmer(StrategyDeployer, ClanMixin):
             if where == target:
                 return True
             if where is None:
-                self.recover_screen(screen)
+                # شاشة تحميل (بعد القارب أو إعادة التشغيل): ننتظر قبل «رجوع» الذي قد يقطع الانتقال
+                if not self.wait_any(["attack", "bb_attack"], 12)[0]:
+                    self.recover_screen(self.adb.screenshot())
                 continue
             boat = "boat_to_builder" if target == "builder" else "boat_to_home"
             if not self.tpl.exists(boat):
@@ -369,7 +378,7 @@ class Farmer(StrategyDeployer, ClanMixin):
         """يرجع لقطة القرية المختارة (تُستخدم لاختيار جهة الهجوم)."""
         f = self.cfg["farm"]
         for _ in range(f.get("max_skips", 30)):
-            self.sleep(f.get("search_wait", 4))
+            self.human_wait(f.get("search_wait", 4))
             screen = self.adb.screenshot()
             if self.loot_ok(screen):
                 return screen
@@ -400,8 +409,52 @@ class Farmer(StrategyDeployer, ClanMixin):
         self.press("end_confirm", timeout=3, wait_after=3)
         self.press("return_home", timeout=15, wait_after=3)
 
+    def human_wait(self, seconds):
+        """انتظار بمدة متغيرة قليلاً كل مرة، فلا يتكرر الإيقاع نفسه بين الهجمات."""
+        self.sleep(seconds * random.uniform(0.8, 1.5))
+
+    # ---------- التعافي من التجمّد ----------
+    def restart_game(self):
+        package = self.cfg.get("package", "com.supercell.clashofclans")
+        self.adb.stop_app(package)
+        self.sleep(3)
+        self.adb.start_app(package)
+        self.sleep(self.cfg["farm"].get("game_boot_seconds", 35))
+        self.watchdog.reset()
+
+    def reboot_emulator(self):
+        if not self.adb.reboot_emulator():
+            return False
+        self.sleep(self.cfg["farm"].get("emulator_boot_seconds", 70))
+        for _ in range(10):
+            if self.adb.connect()[0] and self.adb._adb.screenshot() is not None:
+                break
+            self.sleep(10)
+        self.adb.start_app(self.cfg.get("package", "com.supercell.clashofclans"))
+        self.sleep(self.cfg["farm"].get("game_boot_seconds", 35))
+        self.watchdog.reset()
+        return True
+
+    def recover_frozen(self, reason, restarts):
+        """يرجع False إن يجب إيقاف البوت."""
+        self.stats["restarts"] = self.stats.get("restarts", 0) + 1
+        self.on_stats(self.stats)
+        self.log(t("log_frozen_" + reason, s=self.cfg["farm"].get("freeze_seconds", 60)))
+        if restarts > MAX_RESTARTS_IN_ROW:
+            self.log(t("log_frozen_give_up"))
+            self.notifier.send(t("notify_frozen") + "\n" + self.summary(), "error")
+            return False
+        if restarts > RESTARTS_BEFORE_REBOOT:
+            self.log(t("log_emulator_reboot"))
+            if self.reboot_emulator():
+                return True
+        self.log(t("log_game_kill"))
+        self.restart_game()
+        return True
+
     def one_attack(self):
         self.log(t("log_attack"))
+        self.watchdog.start_attack()
         self.prepare()
         self.press("attack", timeout=10)
         self.press("find_a_match", timeout=10)
@@ -424,6 +477,7 @@ class Farmer(StrategyDeployer, ClanMixin):
             self.press("return_home", timeout=10, wait_after=3)
             raise AttackAborted(t("log_no_army"))
         self.finish_battle(time.time())
+        self.watchdog.end_attack()
         self.finish_attack("log_attack_done")
 
     def finish_attack(self, key):
@@ -440,7 +494,7 @@ class Farmer(StrategyDeployer, ClanMixin):
         every = self.cfg.get("notify", {}).get("every", 1) or 1
         if self.stats["attacks"] % every == 0:
             self.notifier.send(self.summary(), "attack")
-        self.sleep(self.cfg["farm"].get("home_wait", 5))
+        self.human_wait(self.cfg["farm"].get("home_wait", 5))
 
     def summary(self):
         s = self.stats
@@ -467,6 +521,7 @@ class Farmer(StrategyDeployer, ClanMixin):
         next_break = self._between(br["attacks_min"], br["attacks_max"]) if br.get("enabled") else 0
         done_since_break = 0
         errors_in_row = 0
+        restarts_in_row = 0
         try:
             while True:
                 limit = f.get("max_attacks", 0)
@@ -475,9 +530,15 @@ class Farmer(StrategyDeployer, ClanMixin):
                     break
                 try:
                     self.one_attack()
-                    errors_in_row = 0
+                    errors_in_row = restarts_in_row = 0
                 except Stopped:
                     raise
+                except GameFrozen as e:  # تجمّد: نغلق اللعبة ونشغّلها بدل الانتظار للأبد
+                    self.watchdog.end_attack()
+                    restarts_in_row += 1
+                    if not self.recover_frozen(str(e), restarts_in_row):
+                        break
+                    continue
                 except Exception as e:  # نتعافى بدل إيقاف البوت كله
                     errors_in_row += 1
                     self.stats["errors"] += 1
@@ -487,6 +548,12 @@ class Farmer(StrategyDeployer, ClanMixin):
                         self.log(t("log_too_many"))
                         self.notifier.send(t("notify_error", e=e) + "\n" + self.summary(), "error")
                         break
+                    if errors_in_row == ERRORS_BEFORE_RESTART:  # لعبة جديدة قبل الإيقاف، بعدد محدود من المرات
+                        restarts_in_row += 1
+                        if not self.recover_frozen("errors", restarts_in_row):
+                            break
+                        errors_in_row = 0
+                        continue
                     self.sleep(f.get("error_wait", 5))
                     continue
                 done_since_break += 1

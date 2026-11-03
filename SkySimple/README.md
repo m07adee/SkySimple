@@ -1,4 +1,4 @@
-# سكاي البسيط 2.4 — Sky Simple 2.4
+# سكاي البسيط 2.5 — Sky Simple 2.5
 
 بوت هجوم تلقائي لـ Clash of Clans على محاكي LDPlayer، في القرية الرئيسية والقرية الليلية، بواجهة عربية وإنجليزية.
 
@@ -12,6 +12,11 @@
 - المفتاح يعمل على هذا الجهاز فقط، ولا يحتاج إدخاله مرة ثانية.
 - المدة المتبقية تظهر أسفل القائمة الجانبية؛ اضغط عليها لتغيير المفتاح عند التجديد.
 - البرنامج يحتاج اتصالاً بالإنترنت للتحقق من الاشتراك.
+
+## الجديد في 2.5
+- 🧊 **كشف تجمّد اللعبة**: إذا بقيت الشاشة ثابتة تماماً 60 ثانية، أو لم يستجب المحاكي، أو علِق الهجوم أكثر من 12 دقيقة، يغلق البوت اللعبة ويعيد تشغيلها ويكمل وحده.
+- 🔁 **إعادة تشغيل المحاكي**: إن تجمّدت اللعبة مرتين متتاليتين بعد إعادة تشغيلها، يعيد البوت تشغيل LDPlayer كاملاً. وبعد 4 مرات متتالية يتوقف ويرسل إشعاراً.
+- 🛡️ **إيقاع أقرب للبشر**: مدة الانتظار بين الهجمات وأثناء البحث تتغير عشوائياً كل مرة.
 
 ## الجديد في 2.4
 - ⚔️ **هجوم بلا إعداد**: في كل معركة يقرأ البوت شريط الجيش بنفسه (جنود، آلة حصار، أبطال، تعويذات) وينزل كل شيء. لا مسح جيش ولا خانات يدوية.
@@ -36,7 +41,7 @@
 | 🔄 **أكثر من محاكٍ** | `SkySimple.exe --profile 2` لكل محاكٍ إضافي، بإعدادات وإحصائيات مستقلة |
 
 ## ما يتعامل معه البوت تلقائياً
-انقطاع الاتصال (Reload)، النوافذ المنبثقة، الحوارات العالقة (رجوع)، شاشة النتائج العالقة، إغلاق اللعبة، انقطاع ADB، القارب المخفي (تحريك الكاميرا)، وعدم الإنزال قبل التأكد من شاشة المعركة. إن لم يجد جيشاً ينهي المعركة قبل الإنزال بلا خسارة. بعد 5 أخطاء متتالية يتوقف ويرسل إشعاراً.
+تجمّد اللعبة أو المحاكي (إغلاق وإعادة تشغيل)، انقطاع الاتصال (Reload)، النوافذ المنبثقة، الحوارات العالقة (رجوع)، شاشة النتائج العالقة، إغلاق اللعبة، انقطاع ADB، القارب المخفي (تحريك الكاميرا)، وعدم الإنزال قبل التأكد من شاشة المعركة. إن لم يجد جيشاً ينهي المعركة قبل الإنزال بلا خسارة. بعد 5 أخطاء متتالية يتوقف ويرسل إشعاراً.
 
 ## ملاحظات
 - استخدام البوتات يخالف شروط Supercell وقد يؤدي إلى حظر الحساب. استخدمه على مسؤوليتك.
@@ -48,6 +53,9 @@
 2. Extract to a short path (e.g. `C:\SkySimple`) and run **SkySimple.exe** — no Python needed.
 3. Copy your activation key, press **Paste**, then **Activate**. The key works on this computer only; an internet connection is required.
 4. Train your army in the game, then **Connect emulator** → **Start**. No calibration needed.
+
+New in 2.5: freeze watchdog — a completely static screen for 60 s, an unresponsive emulator or an attack stuck
+for 12 minutes makes the bot kill and restart the game (and reboot LDPlayer if that does not help); waits are randomised.
 
 New in 2.4: the bot reads the army bar itself in every battle (no army scan, no manual slots), the deploy-area calibration
 is gone, a new default **Smart** strategy works with any army, any 16:9 resolution is supported, and the activation

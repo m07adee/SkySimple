@@ -8,7 +8,7 @@
 
 *A smart Clash of Clans automation bot for LDPlayer — Arabic & English UI, with a built-in license key system*
 
-![Version](https://img.shields.io/badge/version-2.4-1d9bf0)
+![Version](https://img.shields.io/badge/version-2.5-1d9bf0)
 ![Python](https://img.shields.io/badge/python-3.12-3776AB?logo=python&logoColor=white)
 ![Platform](https://img.shields.io/badge/platform-Windows-0078D6?logo=windows&logoColor=white)
 ![OpenCV](https://img.shields.io/badge/vision-OpenCV-5C3EE8?logo=opencv&logoColor=white)
