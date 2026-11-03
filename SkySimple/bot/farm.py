@@ -449,10 +449,22 @@ class Farmer(StrategyDeployer, ClanMixin):
                  d=s.get("dark", 0), m=mins, err=s.get("errors", 0))
 
     # ---------- الحلقة الرئيسية ----------
+    @staticmethod
+    def _between(a, b):
+        """رقم عشوائي بين حدّين حتى لو أُدخل الأكبر أولاً في الإعدادات."""
+        a, b = int(a), int(b)
+        return random.randint(min(a, b), max(a, b))
+
     def run(self):
+        try:
+            self._run()
+        except Exception as e:  # أي خطأ غير متوقع يظهر في السجل بدل أن يتوقف البوت بصمت
+            self.log(t("log_crash", e=f"{type(e).__name__}: {e}"))
+
+    def _run(self):
         f = self.cfg["farm"]
         br = self.cfg["breaks"]
-        next_break = random.randint(br["attacks_min"], br["attacks_max"])
+        next_break = self._between(br["attacks_min"], br["attacks_max"]) if br.get("enabled") else 0
         done_since_break = 0
         errors_in_row = 0
         try:
@@ -479,11 +491,11 @@ class Farmer(StrategyDeployer, ClanMixin):
                     continue
                 done_since_break += 1
                 if br.get("enabled") and done_since_break >= next_break:
-                    mins = random.randint(br["minutes_min"], br["minutes_max"])
+                    mins = self._between(br["minutes_min"], br["minutes_max"])
                     self.log(t("log_break", m=mins))
                     self.sleep(mins * 60)
                     done_since_break = 0
-                    next_break = random.randint(br["attacks_min"], br["attacks_max"])
+                    next_break = self._between(br["attacks_min"], br["attacks_max"])
         except Stopped:
             self.log(t("log_stopped"))
             if self.stats["attacks"]:

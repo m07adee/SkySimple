@@ -142,6 +142,8 @@ TEXT = {
     "log_stage1": ("🪖 المرحلة 1: إنزال البطل و{n} خانات", "🪖 Stage 1: hero and {n} slots"),
     "log_stage2": ("⭐ المرحلة 2: إنزال البطل و{n} تعزيزات", "⭐ Stage 2: hero and {n} reinforcements"),
     "log_battle_over": ("🏁 انتهت المعركة", "🏁 Battle over"),
+    "log_crash": ("⛔ توقف البوت بسبب خطأ: {e} — راجع الإعدادات ثم اضغط «ابدأ» مجدداً",
+                  "⛔ The bot stopped because of an error: {e} — check the settings, then press Start again"),
     "log_error": ("❌ خطأ: {e} — محاولة التعافي ({n}/{max})", "❌ Error: {e} — recovering ({n}/{max})"),
     "log_too_many": ("⛔ أخطاء متتالية كثيرة — توقف البوت", "⛔ Too many errors in a row — bot stopped"),
     "log_game_restart": ("🔁 اللعبة ليست مفتوحة — إعادة تشغيلها", "🔁 Game is not open — restarting it"),
