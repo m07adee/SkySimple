@@ -23,7 +23,7 @@ from bot.farm import Farmer
 from bot.i18n import BUTTON_GROUPS, btn_name, t
 from bot.vision import Templates
 
-VERSION = "2.5.1"
+VERSION = "2.5.2"
 LICENSE_RECHECK_MS = 30 * 60 * 1000
 LICENSE_MAX_NET_FAILS = 4  # ساعتان بلا إنترنت ثم يتوقف
 if getattr(sys, "frozen", False):

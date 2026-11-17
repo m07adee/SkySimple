@@ -26,12 +26,17 @@ def _registry_dirs():
     except ImportError:
         return []
     dirs = []
-    for name in ("LDPlayer9", "LDPlayer", "LDPlayer4", "LDPlayer64"):
-        try:
-            with winreg.OpenKey(winreg.HKEY_CURRENT_USER, "Software\\XuanZhi\\" + name) as k:
-                dirs.append(winreg.QueryValueEx(k, "InstallDir")[0])
-        except OSError:
-            pass
+    # كل إصدارات LDPlayer (9، 14 بأندرويد 14، ...) تسجّل مجلدها هنا باسم مختلف، فنقرأها كلها
+    try:
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, "Software\\XuanZhi") as root:
+            for i in range(winreg.QueryInfoKey(root)[0]):
+                try:
+                    with winreg.OpenKey(root, winreg.EnumKey(root, i)) as k:
+                        dirs.append(winreg.QueryValueEx(k, "InstallDir")[0])
+                except OSError:
+                    continue
+    except OSError:
+        pass
     uninstall = "Microsoft\\Windows\\CurrentVersion\\Uninstall"
     roots = [(winreg.HKEY_LOCAL_MACHINE, "SOFTWARE\\WOW6432Node\\" + uninstall),
              (winreg.HKEY_LOCAL_MACHINE, "SOFTWARE\\" + uninstall),
@@ -64,7 +69,15 @@ def _drive_dirs():
              ("Program Files", "LDPlayer", "LDPlayer9"), ("Program Files (x86)", "LDPlayer", "LDPlayer9"),
              ("Games", "LDPlayer", "LDPlayer9")]
     drives = [c + ":" + os.sep for c in "CDEFGHIJ" if os.path.exists(c + ":" + os.sep)]
-    return [os.path.join(d, *t) for d in drives for t in tails]
+    dirs = [os.path.join(d, *t) for d in drives for t in tails]
+    # أي مجلد يبدأ اسمه بـ LDPlayer (LDPlayer9، LDPlayer14...) في جذر القرص أو داخل مجلد LDPlayer
+    for d in drives:
+        for parent in (d, os.path.join(d, "LDPlayer"), os.path.join(d, "Program Files", "LDPlayer")):
+            try:
+                dirs += [os.path.join(parent, n) for n in os.listdir(parent) if n.lower().startswith("ldplayer")]
+            except OSError:
+                continue
+    return dirs
 
 
 def ldplayer_dirs():
