@@ -22,8 +22,10 @@ else:
 from bot import license as lic  # noqa: E402
 from supa import Supa, SupaError, parse_time, status_of  # noqa: E402
 
-VERSION = "1.0"
-SETTINGS = os.path.join(os.environ.get("APPDATA", BASE), "SkyAdmin", "admin.json")
+VERSION = "1.1"
+# الإعدادات بجانب SkyAdmin.exe: تبقى معه أينما نُقل، ويقرؤها مهما كانت طريقة فتحه
+SETTINGS = os.path.join(BASE, "admin.json")
+OLD_SETTINGS = os.path.join(os.environ.get("APPDATA", BASE), "SkyAdmin", "admin.json")
 
 BG = "#0d1218"
 CARD = "#16202b"
@@ -64,11 +66,13 @@ def fmt_time(s):
 
 
 def load_settings():
-    try:
-        with open(SETTINGS, encoding="utf-8") as f:
-            return json.load(f)
-    except (OSError, ValueError):
-        return {"url": "", "anon": "", "secret": ""}
+    for path in (SETTINGS, OLD_SETTINGS):  # الإصدار 1.0 كان يحفظها في AppData
+        try:
+            with open(path, encoding="utf-8") as f:
+                return json.load(f)
+        except (OSError, ValueError):
+            continue
+    return {"url": "", "anon": "", "secret": ""}
 
 
 def save_settings(s):

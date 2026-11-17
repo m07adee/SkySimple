@@ -20,3 +20,6 @@ SkyAdmin/icon.ico
 
 # سجل البناء
 SkySimple/build.log
+
+# SkyAdmin server keys (secret) — never commit
+admin.json
