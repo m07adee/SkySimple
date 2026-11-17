@@ -49,8 +49,11 @@ TEXT = {
     "recent_log": ("آخر الأحداث", "Recent activity"),
     "need_connect": ("اتصل بالمحاكي أولاً.", "Connect to the emulator first."),
     "shot_failed": ("تعذر أخذ لقطة الشاشة.", "Could not take a screenshot."),
-    "adb_missing": ("لم يتم العثور على adb.exe.\nحدد مساره في الإعدادات.",
-                    "adb.exe was not found.\nSet its path in Settings."),
+    "adb_missing": ("لم يتم العثور على محاكي LDPlayer.\nثبّت LDPlayer 9 من ldplayer.net وشغّله، ثم اضغط «اتصال بالمحاكي» مجدداً.\n"
+                    "إن كان مثبّتاً في مكان غير معتاد: الإعدادات ← مسار adb.exe، واكتب مجلد LDPlayer (مثل D:\\LDPlayer\\LDPlayer9).",
+                    "LDPlayer was not found.\nInstall LDPlayer 9 from ldplayer.net, start it, then press Connect again.\n"
+                    "If it is installed in an unusual place: Settings → adb.exe path, and enter the LDPlayer folder "
+                    "(e.g. D:\\LDPlayer\\LDPlayer9)."),
     # ---- القرية الرئيسية ----
     "army": ("الجيش", "Army"),
     "type_troop": ("جندي", "Troop"),

@@ -19,19 +19,80 @@ NO_WINDOW = 0x08000000 if os.name == "nt" else 0
 REF_W, REF_H = 1600, 900
 
 
+def _registry_dirs():
+    """مجلدات LDPlayer كما سجّلها مثبّته في Windows، مهما كان القرص أو المجلد."""
+    try:
+        import winreg
+    except ImportError:
+        return []
+    dirs = []
+    for name in ("LDPlayer9", "LDPlayer", "LDPlayer4", "LDPlayer64"):
+        try:
+            with winreg.OpenKey(winreg.HKEY_CURRENT_USER, "Software\\XuanZhi\\" + name) as k:
+                dirs.append(winreg.QueryValueEx(k, "InstallDir")[0])
+        except OSError:
+            pass
+    uninstall = "Microsoft\\Windows\\CurrentVersion\\Uninstall"
+    roots = [(winreg.HKEY_LOCAL_MACHINE, "SOFTWARE\\WOW6432Node\\" + uninstall),
+             (winreg.HKEY_LOCAL_MACHINE, "SOFTWARE\\" + uninstall),
+             (winreg.HKEY_CURRENT_USER, "Software\\" + uninstall)]
+    for hive, path in roots:
+        try:
+            root = winreg.OpenKey(hive, path)
+        except OSError:
+            continue
+        with root:
+            for i in range(winreg.QueryInfoKey(root)[0]):
+                try:
+                    with winreg.OpenKey(root, winreg.EnumKey(root, i)) as k:
+                        if "ldplayer" not in str(winreg.QueryValueEx(k, "DisplayName")[0]).lower():
+                            continue
+                        for value in ("InstallLocation", "DisplayIcon", "UninstallString"):
+                            try:
+                                v = str(winreg.QueryValueEx(k, value)[0]).split(",")[0].strip('" ')
+                            except OSError:
+                                continue
+                            dirs.append(v if os.path.isdir(v) else os.path.dirname(v))
+                except OSError:
+                    continue
+    return dirs
+
+
+def _drive_dirs():
+    """تثبيت في مكان غير معتاد على قرص آخر: نجرّب الأماكن الشائعة على كل الأقراص."""
+    tails = [("LDPlayer", "LDPlayer9"), ("LDPlayer9",), ("LDPlayer", "LDPlayer4.0"),
+             ("Program Files", "LDPlayer", "LDPlayer9"), ("Program Files (x86)", "LDPlayer", "LDPlayer9"),
+             ("Games", "LDPlayer", "LDPlayer9")]
+    drives = [c + ":" + os.sep for c in "CDEFGHIJ" if os.path.exists(c + ":" + os.sep)]
+    return [os.path.join(d, *t) for d in drives for t in tails]
+
+
+def ldplayer_dirs():
+    """كل مجلدات LDPlayer الموجودة فعلاً، بلا تكرار، والمسجّلة في Windows أولاً."""
+    seen, out = set(), []
+    for d in _registry_dirs() + LDPLAYER_DIRS + _drive_dirs():
+        key = os.path.normcase(os.path.normpath(d or "."))
+        if d and key not in seen and os.path.isfile(os.path.join(d, "adb.exe")):
+            seen.add(key)
+            out.append(d)
+    return out
+
+
 def find_adb(configured="auto"):
-    if configured and configured != "auto" and os.path.isfile(configured):
-        return configured
-    for d in LDPLAYER_DIRS:
-        p = os.path.join(d, "adb.exe")
-        if os.path.isfile(p):
-            return p
-    return shutil.which("adb")
+    if configured and configured != "auto":
+        if os.path.isfile(configured):
+            return configured
+        if os.path.isfile(os.path.join(configured, "adb.exe")):  # كُتب المجلد بدل الملف
+            return os.path.join(configured, "adb.exe")
+    for d in ldplayer_dirs():
+        return os.path.join(d, "adb.exe")
+    sdk = os.path.join(os.environ.get("LOCALAPPDATA", ""), "Android", "Sdk", "platform-tools", "adb.exe")
+    return sdk if os.path.isfile(sdk) else shutil.which("adb")
 
 
 def ldplayer_instances():
     """نسخ LDPlayer المثبتة: [(الرقم، الاسم، يعمل؟، عنوان ADB)]. منفذ ADB = 5555 + 2 × الرقم."""
-    for d in LDPLAYER_DIRS:
+    for d in ldplayer_dirs():
         exe = os.path.join(d, "ldconsole.exe")
         if not os.path.isfile(exe):
             continue
@@ -146,7 +207,7 @@ class ADB:
         if not port.isdigit():
             return False
         index = (int(port) - 5555) // 2
-        dirs = [os.path.dirname(self.adb)] + LDPLAYER_DIRS
+        dirs = [os.path.dirname(self.adb)] + ldplayer_dirs()
         for d in dirs:
             exe = os.path.join(d, "ldconsole.exe")
             if os.path.isfile(exe):
